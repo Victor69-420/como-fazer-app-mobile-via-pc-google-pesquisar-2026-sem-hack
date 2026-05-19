@@ -1,14 +1,8 @@
 // src/context/AppContext.js
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import {
-  loginLocal,
-  registerLocal,
-  clearToken,
-  getToken,
-  getSavedUser,
-  LOCAL_PRODUCTS,
-  LOCAL_CATEGORIES,
-  apiFetch,
+  loginLocal, registerLocal, clearToken,
+  getToken, getSavedUser, LOCAL_PRODUCTS, apiFetch, API_BASE,
 } from '../services/api';
 
 const AppContext = createContext({});
@@ -17,10 +11,26 @@ export const useApp = () => useContext(AppContext);
 export function AppProvider({ children }) {
   const [user, setUser]         = useState(null);
   const [loading, setLoading]   = useState(true);
-  const [cart, setCart]         = useState([]);
-  const [products, setProducts] = useState(LOCAL_PRODUCTS);
-  const [categories, setCategories] = useState(LOCAL_CATEGORIES);
-  const [orders, setOrders]     = useState([]);
+  const [apiOnline, setApiOnline] = useState(false);
+
+  // Carrinho (cartItems = alias para cart para compatibilidade das telas)
+  const [cartItems, setCartItems] = useState([]);
+  const [count, setCount]         = useState(0);
+
+  const products = LOCAL_PRODUCTS;
+
+  // ── Checar se API está online ─────────────────────────────
+  const checkApi = useCallback(async () => {
+    try {
+      const ctrl = new AbortController();
+      const tid  = setTimeout(() => ctrl.abort(), 3000);
+      const res  = await fetch(`${API_BASE}/health`, { signal: ctrl.signal });
+      clearTimeout(tid);
+      setApiOnline(res.ok);
+    } catch {
+      setApiOnline(false);
+    }
+  }, []);
 
   // ── Restaurar sessão ──────────────────────────────────────
   useEffect(() => {
@@ -37,40 +47,69 @@ export function AppProvider({ children }) {
         setLoading(false);
       }
     })();
+    checkApi();
   }, []);
 
-  // ── Tentar carregar produtos da API (fallback já está no apiFetch) ──
+  // ── Atualizar contagem do carrinho ────────────────────────
+  const refreshCartCount = useCallback(async () => {
+    if (apiOnline && user) {
+      try {
+        const r = await apiFetch('/cart');
+        setCount(r?.totalItems || 0);
+      } catch { /* usa estado local */ }
+    } else {
+      setCount(cartItems.reduce((s, i) => s + i.qty, 0));
+    }
+  }, [apiOnline, user, cartItems]);
+
   useEffect(() => {
-    if (!user) return;
-    apiFetch('/products')
-      .then(data => { if (data?.products?.length) setProducts(data.products); })
-      .catch(() => {}); // silencia, usa LOCAL_PRODUCTS
-    apiFetch('/categories')
-      .then(data => { if (data?.categories?.length) setCategories(data.categories); })
-      .catch(() => {});
-  }, [user]);
+    setCount(cartItems.reduce((s, i) => s + i.qty, 0));
+  }, [cartItems]);
 
   // ── Auth ──────────────────────────────────────────────────
+  // login: retorna { success, message } para AuthScreen
   const login = useCallback(async (email, password) => {
-    const { user: u } = await loginLocal({ email, password });
-    setUser(u);
+    try {
+      const { user: u } = await loginLocal({ email, password });
+      setUser(u);
+      return { success: true };
+    } catch (e) {
+      return { success: false, message: e.message };
+    }
   }, []);
 
-  const register = useCallback(async (name, email, phone, password) => {
-    const { user: u } = await registerLocal({ name, email, phone, password });
-    setUser(u);
+  // register: AuthScreen chama register(name, email, password, phone)
+  const register = useCallback(async (name, email, password, phone) => {
+    try {
+      const { user: u } = await registerLocal({ name, email, phone, password });
+      setUser(u);
+      return { success: true };
+    } catch (e) {
+      return { success: false, message: e.message };
+    }
   }, []);
 
   const logout = useCallback(async () => {
     await clearToken();
     setUser(null);
-    setCart([]);
+    setCartItems([]);
+    setCount(0);
   }, []);
 
   // ── Carrinho ──────────────────────────────────────────────
-  const addToCart = useCallback((product, qty = 1) => {
-    setCart(prev => {
-      const idx = prev.findIndex(i => i.id === product.id);
+  // addToCart aceita (id, qty) ou (id) — telas passam apenas o id
+  const addToCart = useCallback(async (productId, qty = 1) => {
+    if (apiOnline && user) {
+      try {
+        await apiFetch('/cart', { method: 'POST', body: { productId, qty } });
+        return;
+      } catch { /* fallback local */ }
+    }
+    // Offline: adiciona pelo ID buscando o produto nos dados locais
+    const product = LOCAL_PRODUCTS.find(p => p.id === productId);
+    if (!product) return;
+    setCartItems(prev => {
+      const idx = prev.findIndex(i => i.id === productId);
       if (idx >= 0) {
         const updated = [...prev];
         updated[idx] = { ...updated[idx], qty: updated[idx].qty + qty };
@@ -78,48 +117,70 @@ export function AppProvider({ children }) {
       }
       return [...prev, { ...product, qty }];
     });
-  }, []);
+  }, [apiOnline, user]);
 
   const removeFromCart = useCallback((productId) => {
-    setCart(prev => prev.filter(i => i.id !== productId));
+    setCartItems(prev => prev.filter(i => i.id !== productId));
   }, []);
 
   const updateCartQty = useCallback((productId, qty) => {
     if (qty <= 0) { removeFromCart(productId); return; }
-    setCart(prev => prev.map(i => i.id === productId ? { ...i, qty } : i));
+    setCartItems(prev => prev.map(i => i.id === productId ? { ...i, qty } : i));
   }, [removeFromCart]);
 
-  const clearCart = useCallback(() => setCart([]), []);
+  const clearCart = useCallback(() => {
+    setCartItems([]);
+    setCount(0);
+  }, []);
 
-  const cartCount = cart.reduce((sum, i) => sum + i.qty, 0);
-  const cartTotal = cart.reduce((sum, i) => sum + i.price * i.qty, 0);
+  const cartTotal = cartItems.reduce((s, i) => s + i.price * i.qty, 0);
 
   // ── Pedidos ───────────────────────────────────────────────
+  const [orders, setOrders] = useState([]);
+
   const placeOrder = useCallback(async () => {
-    if (cart.length === 0) throw new Error('Carrinho vazio.');
+    if (cartItems.length === 0) throw new Error('Carrinho vazio.');
     const newOrder = {
-      id: `ord_${Date.now()}`,
-      items: [...cart],
+      orderId: `ASR-${Date.now()}`,
+      items: [...cartItems],
       total: cartTotal,
-      date: new Date().toISOString(),
+      createdAt: new Date().toISOString(),
       status: 'Confirmado',
     };
     setOrders(prev => [newOrder, ...prev]);
     clearCart();
-    return newOrder;
-  }, [cart, cartTotal, clearCart]);
+    return { success: true, order: newOrder };
+  }, [cartItems, cartTotal, clearCart]);
 
   return (
     <AppContext.Provider value={{
       // Auth
-      user, loading, login, register, logout,
+      user, loading,
+      login, register, logout,
+      setUser,
+
+      // API status
+      apiOnline,
+
       // Catálogo
-      products, categories,
-      // Carrinho
-      cart, cartCount, cartTotal,
-      addToCart, removeFromCart, updateCartQty, clearCart,
+      products,
+
+      // Carrinho — nomes compatíveis com todas as telas
+      cart: cartItems,
+      cartItems,
+      cartCount: count,
+      cartTotal,
+      setCart: setCartItems,
+      setCount,
+      addToCart,
+      removeFromCart,
+      updateCartQty,
+      clearCart,
+      refreshCartCount,
+
       // Pedidos
-      orders, placeOrder,
+      orders,
+      placeOrder,
     }}>
       {children}
     </AppContext.Provider>
