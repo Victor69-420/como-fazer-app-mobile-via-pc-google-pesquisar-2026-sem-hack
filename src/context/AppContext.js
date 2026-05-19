@@ -1,115 +1,127 @@
 // src/context/AppContext.js
-import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
 import {
-  loginLocal, registerLocal, clearToken,
-  getToken, getSavedUser, LOCAL_PRODUCTS, apiFetch, API_BASE,
+  loginApi, registerApi,
+  loginLocal, registerLocal,
+  clearToken, getToken, getSavedUser,
+  LOCAL_PRODUCTS, apiFetch, checkBackendOnline,
 } from '../services/api';
 
 const AppContext = createContext({});
 export const useApp = () => useContext(AppContext);
 
 export function AppProvider({ children }) {
-  const [user, setUser]         = useState(null);
-  const [loading, setLoading]   = useState(true);
+  const [user, setUser]           = useState(null);
+  const [loading, setLoading]     = useState(true);
   const [apiOnline, setApiOnline] = useState(false);
-
-  // Carrinho (cartItems = alias para cart para compatibilidade das telas)
   const [cartItems, setCartItems] = useState([]);
   const [count, setCount]         = useState(0);
+  const [orders, setOrders]       = useState([]);
 
-  const products = LOCAL_PRODUCTS;
-
-  // ── Checar se API está online ─────────────────────────────
-  const checkApi = useCallback(async () => {
-    try {
-      const ctrl = new AbortController();
-      const tid  = setTimeout(() => ctrl.abort(), 3000);
-      const res  = await fetch(`${API_BASE}/health`, { signal: ctrl.signal });
-      clearTimeout(tid);
-      setApiOnline(res.ok);
-    } catch {
-      setApiOnline(false);
-    }
-  }, []);
-
-  // ── Restaurar sessão ──────────────────────────────────────
+  // ── Inicialização ─────────────────────────────────────────
   useEffect(() => {
     (async () => {
       try {
-        const token = await getToken();
+        const [online, token] = await Promise.all([
+          checkBackendOnline(),
+          getToken(),
+        ]);
+        setApiOnline(online);
+
         if (token) {
-          const savedUser = await getSavedUser();
-          if (savedUser) setUser(savedUser);
+          if (online) {
+            try {
+              const r = await apiFetch('/auth/me');
+              if (r?.user) { setUser(r.user); }
+            } catch {
+              const saved = await getSavedUser();
+              if (saved) setUser(saved);
+            }
+          } else {
+            const saved = await getSavedUser();
+            if (saved) setUser(saved);
+          }
         }
       } catch (e) {
-        console.log('Restore session error:', e);
+        console.log('Init error:', e);
       } finally {
         setLoading(false);
       }
     })();
-    checkApi();
   }, []);
 
-  // ── Atualizar contagem do carrinho ────────────────────────
-  const refreshCartCount = useCallback(async () => {
-    if (apiOnline && user) {
-      try {
-        const r = await apiFetch('/cart');
-        setCount(r?.totalItems || 0);
-      } catch { /* usa estado local */ }
-    } else {
-      setCount(cartItems.reduce((s, i) => s + i.qty, 0));
-    }
-  }, [apiOnline, user, cartItems]);
-
+  // Sincronizar badge do carrinho
   useEffect(() => {
-    setCount(cartItems.reduce((s, i) => s + i.qty, 0));
+    setCount(cartItems.reduce((s, i) => s + (i.qty || 1), 0));
   }, [cartItems]);
 
   // ── Auth ──────────────────────────────────────────────────
-  // login: retorna { success, message } para AuthScreen
+  // login(email, password) → { success, message }
   const login = useCallback(async (email, password) => {
     try {
-      const { user: u } = await loginLocal({ email, password });
-      setUser(u);
+      const res = apiOnline
+        ? await loginApi({ email, password })
+        : await loginLocal({ email, password });
+      setUser(res.user);
       return { success: true };
     } catch (e) {
       return { success: false, message: e.message };
     }
-  }, []);
+  }, [apiOnline]);
 
-  // register: AuthScreen chama register(name, email, password, phone)
+  // AuthScreen chama: register(name, email, password, phone)
   const register = useCallback(async (name, email, password, phone) => {
     try {
-      const { user: u } = await registerLocal({ name, email, phone, password });
-      setUser(u);
+      const res = apiOnline
+        ? await registerApi({ name, email, password, phone })
+        : await registerLocal({ name, email, password, phone });
+      setUser(res.user);
       return { success: true };
     } catch (e) {
       return { success: false, message: e.message };
     }
-  }, []);
+  }, [apiOnline]);
 
   const logout = useCallback(async () => {
+    if (apiOnline) {
+      try { await apiFetch('/auth/logout', { method: 'POST' }); } catch {}
+    }
     await clearToken();
     setUser(null);
     setCartItems([]);
     setCount(0);
+  }, [apiOnline]);
+
+  // ── Carrinho helpers ──────────────────────────────────────
+  const _loadCartFromApi = useCallback(async () => {
+    try {
+      const r = await apiFetch('/cart');
+      if (r?.items) {
+        const normalized = r.items.map(i => ({ ...i, id: i.productId }));
+        setCartItems(normalized);
+        setCount(r.totalItems || 0);
+      }
+    } catch {}
   }, []);
 
-  // ── Carrinho ──────────────────────────────────────────────
-  // addToCart aceita (id, qty) ou (id) — telas passam apenas o id
+  const refreshCartCount = useCallback(async () => {
+    if (apiOnline) await _loadCartFromApi();
+    else setCount(cartItems.reduce((s, i) => s + (i.qty || 1), 0));
+  }, [apiOnline, cartItems, _loadCartFromApi]);
+
+  // addToCart(productId, qty) — telas passam apenas o ID (numérico)
   const addToCart = useCallback(async (productId, qty = 1) => {
-    if (apiOnline && user) {
+    if (apiOnline) {
       try {
         await apiFetch('/cart', { method: 'POST', body: { productId, qty } });
+        await _loadCartFromApi();
         return;
-      } catch { /* fallback local */ }
+      } catch (e) { console.log('addToCart err:', e.message); }
     }
-    // Offline: adiciona pelo ID buscando o produto nos dados locais
-    const product = LOCAL_PRODUCTS.find(p => p.id === productId);
+    const product = LOCAL_PRODUCTS.find(p => p.id === productId || p.id === Number(productId));
     if (!product) return;
     setCartItems(prev => {
-      const idx = prev.findIndex(i => i.id === productId);
+      const idx = prev.findIndex(i => i.id === product.id);
       if (idx >= 0) {
         const updated = [...prev];
         updated[idx] = { ...updated[idx], qty: updated[idx].qty + qty };
@@ -117,55 +129,89 @@ export function AppProvider({ children }) {
       }
       return [...prev, { ...product, qty }];
     });
-  }, [apiOnline, user]);
+  }, [apiOnline, _loadCartFromApi]);
 
-  const removeFromCart = useCallback((productId) => {
+  const removeFromCart = useCallback(async (productId) => {
+    if (apiOnline) {
+      try {
+        await apiFetch(`/cart/${productId}`, { method: 'DELETE' });
+        await _loadCartFromApi();
+        return;
+      } catch {}
+    }
     setCartItems(prev => prev.filter(i => i.id !== productId));
-  }, []);
+  }, [apiOnline, _loadCartFromApi]);
 
-  const updateCartQty = useCallback((productId, qty) => {
-    if (qty <= 0) { removeFromCart(productId); return; }
+  const updateCartQty = useCallback(async (productId, qty) => {
+    if (qty <= 0) { await removeFromCart(productId); return; }
+    if (apiOnline) {
+      try {
+        await apiFetch(`/cart/${productId}`, { method: 'PUT', body: { qty } });
+        await _loadCartFromApi();
+        return;
+      } catch {}
+    }
     setCartItems(prev => prev.map(i => i.id === productId ? { ...i, qty } : i));
-  }, [removeFromCart]);
+  }, [apiOnline, removeFromCart, _loadCartFromApi]);
 
-  const clearCart = useCallback(() => {
+  const clearCart = useCallback(async () => {
+    if (apiOnline) {
+      try { await apiFetch('/cart', { method: 'DELETE' }); } catch {}
+    }
     setCartItems([]);
     setCount(0);
-  }, []);
+  }, [apiOnline]);
 
-  const cartTotal = cartItems.reduce((s, i) => s + i.price * i.qty, 0);
+  const cartTotal = cartItems.reduce((s, i) => s + (i.price || 0) * (i.qty || 1), 0);
 
   // ── Pedidos ───────────────────────────────────────────────
-  const [orders, setOrders] = useState([]);
-
-  const placeOrder = useCallback(async () => {
-    if (cartItems.length === 0) throw new Error('Carrinho vazio.');
-    const newOrder = {
+  const placeOrder = useCallback(async (payment = 'cartão', address = 'Endereço principal') => {
+    if (apiOnline) {
+      const r = await apiFetch('/orders', { method: 'POST', body: { payment, address } });
+      if (r?.success && r.order) {
+        setOrders(prev => [r.order, ...prev]);
+        setCartItems([]);
+        setCount(0);
+        // Atualizar stats locais do usuário
+        setUser(prev => prev ? {
+          ...prev,
+          stats: {
+            orders:     (prev.stats?.orders     || 0) + 1,
+            totalSpent: (prev.stats?.totalSpent || 0) + r.order.total,
+            points:     (prev.stats?.points     || 0) + Math.floor(r.order.total / 10),
+          },
+        } : prev);
+      }
+      return r;
+    }
+    // Offline
+    if (!cartItems.length) throw new Error('Carrinho vazio.');
+    const order = {
       orderId: `ASR-${Date.now()}`,
       items: [...cartItems],
       total: cartTotal,
       createdAt: new Date().toISOString(),
-      status: 'Confirmado',
+      status: 'confirmado',
     };
-    setOrders(prev => [newOrder, ...prev]);
-    clearCart();
-    return { success: true, order: newOrder };
-  }, [cartItems, cartTotal, clearCart]);
+    setOrders(prev => [order, ...prev]);
+    setCartItems([]);
+    setCount(0);
+    return { success: true, order };
+  }, [apiOnline, cartItems, cartTotal]);
 
   return (
     <AppContext.Provider value={{
       // Auth
-      user, loading,
+      user, loading, setUser,
       login, register, logout,
-      setUser,
 
-      // API status
+      // Status da API
       apiOnline,
 
       // Catálogo
-      products,
+      products: LOCAL_PRODUCTS,
 
-      // Carrinho — nomes compatíveis com todas as telas
+      // Carrinho (nomes compatíveis com TODAS as telas)
       cart: cartItems,
       cartItems,
       cartCount: count,

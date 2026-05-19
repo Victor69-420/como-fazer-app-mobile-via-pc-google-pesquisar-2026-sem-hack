@@ -292,6 +292,15 @@ app.get('/api/search', (req,res) => {
   res.json({ success:true, query:q, total:results.length, results });
 });
 
+
+// ═══════════════════════════════════════════════════════════
+//  HEALTH CHECK
+// ═══════════════════════════════════════════════════════════
+
+app.get('/api/health', (_,res) => {
+  res.json({ success: true, status: 'online', timestamp: new Date().toISOString() });
+});
+
 // SPA fallback
 app.get('*', (req,res) => res.sendFile(path.join(__dirname,'public','index.html')));
 
