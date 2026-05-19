@@ -1,0 +1,17 @@
+[
+  {
+    "id": "b74727f8-7d8c-4e2b-bd86-ffd9a0553a68",
+    "name": "Victor",
+    "email": "victorenzo33@gmail.com",
+    "phone": "21994498974",
+    "password": "fa46af24a4f884164a09da8158af61799173c556b45400607c175d8d46bff771",
+    "avatar": "V",
+    "tag": "🔧 Cliente ASR",
+    "stats": {
+      "orders": 1,
+      "totalSpent": 414.4,
+      "points": 41
+    },
+    "createdAt": "2026-05-01T03:17:05.006Z"
+  }
+]
