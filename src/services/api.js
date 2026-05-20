@@ -4,7 +4,7 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ⚠️ Troque pelos seus dados do Supabase (Project Settings → API)
 const SUPABASE_URL  = 'https://vatkfhvvwkrherfpjcoy.supabase.co';
-const SUPABASE_ANON = 'SUA_ANON_KEY_AQUI';
+const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZhdGtmaHZ2d2tyaGVyZnBqY295Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyODU0ODgsImV4cCI6MjA5NDg2MTQ4OH0.8ggmSoUHhrSH2OtRP8KjfKF1bYNc5kSXn-Sk5V5Iui0';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: {
