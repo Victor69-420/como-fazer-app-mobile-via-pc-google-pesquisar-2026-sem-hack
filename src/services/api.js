@@ -4,13 +4,13 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // ⚠️ Troque pelos seus dados do Supabase (Project Settings → API)
 const SUPABASE_URL  = 'https://vatkfhvvwkrherfpjcoy.supabase.co';
-const SUPABASE_ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InZhdGtmaHZ2d2tyaGVyZnBqY295Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzkyODU0ODgsImV4cCI6MjA5NDg2MTQ4OH0.8ggmSoUHhrSH2OtRP8KjfKF1bYNc5kSXn-Sk5V5Iui0';
+const SUPABASE_ANON = 'SUA_ANON_KEY_AQUI';
 
 export const supabase = createClient(SUPABASE_URL, SUPABASE_ANON, {
   auth: {
-    storage:          AsyncStorage,
-    autoRefreshToken: true,
-    persistSession:   true,
+    storage:            AsyncStorage,
+    autoRefreshToken:   true,
+    persistSession:     true,
     detectSessionInUrl: false,
   },
 });
@@ -24,6 +24,7 @@ export function fmtPrice(value) {
 export async function loginSupabase({ email, password }) {
   const { data, error } = await supabase.auth.signInWithPassword({ email, password });
   if (error) throw new Error(error.message);
+  if (!data?.user) throw new Error('Usuário não encontrado.');
   const profile = await getProfile(data.user.id);
   return { user: buildUser(data.user, profile) };
 }
@@ -32,11 +33,31 @@ export async function registerSupabase({ name, email, password, phone }) {
   const { data, error } = await supabase.auth.signUp({
     email,
     password,
-    options: { data: { name, phone } },
+    options: { data: { name, phone: phone || '' } },
   });
   if (error) throw new Error(error.message);
-  const profile = await getProfile(data.user.id);
-  return { user: buildUser(data.user, profile) };
+
+  // Se confirmação de e-mail estiver ativa, data.user existe mas session é null
+  // Tentamos fazer login direto depois do registro
+  let authUser = data?.user;
+  if (!authUser) throw new Error('Erro ao criar conta. Tente novamente.');
+
+  // Tentar login automático após registro
+  try {
+    const { data: loginData, error: loginError } = await supabase.auth.signInWithPassword({
+      email,
+      password,
+    });
+    if (!loginError && loginData?.user) {
+      authUser = loginData.user;
+    }
+  } catch {}
+
+  // Aguardar um pouco para o trigger criar o perfil
+  await new Promise(r => setTimeout(r, 800));
+
+  const profile = await getProfile(authUser.id);
+  return { user: buildUser(authUser, profile) };
 }
 
 export async function logoutSupabase() {
@@ -51,22 +72,28 @@ export async function getSessionUser() {
 }
 
 async function getProfile(userId) {
-  const { data } = await supabase
-    .from('profiles')
-    .select('*')
-    .eq('id', userId)
-    .single();
-  return data;
+  try {
+    const { data } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', userId)
+      .single();
+    return data;
+  } catch { return null; }
 }
 
 function buildUser(authUser, profile) {
+  const name = profile?.name
+    || authUser?.user_metadata?.name
+    || authUser?.email?.split('@')[0]
+    || 'Usuário';
   return {
     id:    authUser.id,
     email: authUser.email,
-    name:  profile?.name  || authUser.user_metadata?.name || authUser.email.split('@')[0],
-    phone: profile?.phone || '',
+    name,
+    phone: profile?.phone || authUser?.user_metadata?.phone || '',
     tag:   profile?.tag   || '🔧 Cliente ASR',
-    avatar: (profile?.name || authUser.email)[0]?.toUpperCase() || 'U',
+    avatar: name[0]?.toUpperCase() || 'U',
     stats: {
       orders:     profile?.orders_count || 0,
       totalSpent: profile?.total_spent  || 0,
@@ -75,14 +102,13 @@ function buildUser(authUser, profile) {
   };
 }
 
-// ── Carrinho (Supabase) ───────────────────────────────────────
+// ── Carrinho ──────────────────────────────────────────────────
 export async function getCartFromDb(userId) {
   const { data, error } = await supabase
     .from('cart_items')
     .select('*')
     .eq('user_id', userId);
-  if (error) throw error;
-  // Enriquecer com dados do produto local
+  if (error) return [];
   return (data || []).map(row => {
     const product = LOCAL_PRODUCTS.find(p => p.id === row.product_id);
     return product ? { ...product, qty: row.qty } : null;
@@ -92,7 +118,10 @@ export async function getCartFromDb(userId) {
 export async function upsertCartItem(userId, productId, qty) {
   const { error } = await supabase
     .from('cart_items')
-    .upsert({ user_id: userId, product_id: productId, qty }, { onConflict: 'user_id,product_id' });
+    .upsert(
+      { user_id: userId, product_id: productId, qty },
+      { onConflict: 'user_id,product_id' }
+    );
   if (error) throw error;
 }
 
@@ -113,7 +142,7 @@ export async function clearCartDb(userId) {
   if (error) throw error;
 }
 
-// ── Pedidos (Supabase) ────────────────────────────────────────
+// ── Pedidos ───────────────────────────────────────────────────
 export async function saveOrderDb(userId, order) {
   const { error } = await supabase.from('orders').insert({
     user_id:  userId,
@@ -121,12 +150,12 @@ export async function saveOrderDb(userId, order) {
     items:    order.items,
     total:    order.total,
     status:   order.status,
-    payment:  order.payment  || 'cartão',
-    address:  order.address  || 'Endereço principal',
+    payment:  order.payment || 'cartão',
+    address:  order.address || 'Endereço principal',
   });
   if (error) throw error;
 
-  // Atualizar stats do perfil
+  // Atualizar stats
   const { data: profile } = await supabase
     .from('profiles').select('orders_count,total_spent,points').eq('id', userId).single();
   if (profile) {
@@ -144,7 +173,7 @@ export async function getOrdersDb(userId) {
     .select('*')
     .eq('user_id', userId)
     .order('created_at', { ascending: false });
-  if (error) throw error;
+  if (error) return [];
   return (data || []).map(o => ({
     orderId:   o.order_id,
     items:     o.items,
