@@ -10,10 +10,10 @@ import { apiFetch, LOCAL_PRODUCTS, CATEGORIES } from '../services/api';
 import { useApp } from '../context/AppContext';
 
 const SORTS = [
-  { label: 'Relevância', value: '' },
-  { label: 'Menor Preço', value: 'price_asc' },
-  { label: 'Maior Preço', value: 'price_desc' },
-  { label: 'Avaliação', value: 'rating' },
+  { label: 'Relevância',   value: '' },
+  { label: 'Menor Preço',  value: 'price_asc' },
+  { label: 'Maior Preço',  value: 'price_desc' },
+  { label: 'Avaliação',    value: 'rating' },
 ];
 
 export default function ProductsScreen({ navigation, route }) {
@@ -32,19 +32,22 @@ export default function ProductsScreen({ navigation, route }) {
 
   const load = useCallback(async () => {
     if (apiOnline) {
-      const params = new URLSearchParams();
-      if (cat !== 'Todos') params.set('cat', cat);
-      if (sort) params.set('sort', sort);
-      const r = await apiFetch(`/products?${params}`);
-      setProducts(r?.products || LOCAL_PRODUCTS);
-    } else {
-      let p = [...LOCAL_PRODUCTS];
-      if (cat !== 'Todos') p = p.filter(x => x.cat === cat);
-      if (sort === 'price_asc')  p.sort((a,b) => a.price - b.price);
-      if (sort === 'price_desc') p.sort((a,b) => b.price - a.price);
-      if (sort === 'rating')     p.sort((a,b) => b.rating - a.rating);
-      setProducts(p);
+      try {
+        const params = new URLSearchParams();
+        if (cat !== 'Todos') params.set('cat', cat);
+        if (sort) params.set('sort', sort);
+        const r = await apiFetch(`/products?${params}`);
+        setProducts(r?.products || LOCAL_PRODUCTS);
+        return;
+      } catch {}
     }
+    // Offline
+    let p = [...LOCAL_PRODUCTS];
+    if (cat !== 'Todos') p = p.filter(x => x.cat === cat);
+    if (sort === 'price_asc')  p.sort((a, b) => a.price - b.price);
+    if (sort === 'price_desc') p.sort((a, b) => b.price - a.price);
+    if (sort === 'rating')     p.sort((a, b) => b.rating - a.rating);
+    setProducts(p);
   }, [apiOnline, cat, sort]);
 
   useEffect(() => { load(); }, [load]);
@@ -60,25 +63,50 @@ export default function ProductsScreen({ navigation, route }) {
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
-      {/* Category filter */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.catsScroll}>
-        {CATEGORIES.map(c => (
-          <TouchableOpacity key={c} style={[styles.catChip, cat === c && styles.catChipActive]} onPress={() => setCat(c)}>
-            <Text style={[styles.catChipText, cat === c && styles.catChipTextActive]}>{c}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
 
-      {/* Sort filter */}
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.sortsScroll}>
-        {SORTS.map(s => (
-          <TouchableOpacity key={s.value} style={[styles.sortChip, sort === s.value && styles.sortChipActive]} onPress={() => setSort(s.value)}>
-            <Text style={[styles.sortChipText, sort === s.value && styles.sortChipTextActive]}>{s.label}</Text>
-          </TouchableOpacity>
-        ))}
-      </ScrollView>
+      {/* ── Filtro de categorias ── */}
+      <View style={styles.filterRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterContent}
+        >
+          {CATEGORIES.map(c => (
+            <TouchableOpacity
+              key={c}
+              style={[styles.catChip, cat === c && styles.catChipActive]}
+              onPress={() => setCat(c)}
+            >
+              <Text style={[styles.catChipText, cat === c && styles.catChipTextActive]}>{c}</Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
 
-      <Text style={styles.count}>{products.length} produto{products.length !== 1 ? 's' : ''}</Text>
+      {/* ── Filtro de ordenação ── */}
+      <View style={styles.filterRow}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.filterContent}
+        >
+          {SORTS.map(s => (
+            <TouchableOpacity
+              key={s.value}
+              style={[styles.sortChip, sort === s.value && styles.sortChipActive]}
+              onPress={() => setSort(s.value)}
+            >
+              <Text style={[styles.sortChipText, sort === s.value && styles.sortChipTextActive]}>
+                {s.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      </View>
+
+      <Text style={styles.count}>
+        {products.length} produto{products.length !== 1 ? 's' : ''}
+      </Text>
 
       <FlatList
         data={products}
@@ -87,7 +115,9 @@ export default function ProductsScreen({ navigation, route }) {
         contentContainerStyle={styles.grid}
         columnWrapperStyle={{ gap: spacing.sm }}
         showsVerticalScrollIndicator={false}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.orange} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor={colors.orange} />
+        }
         renderItem={({ item }) => (
           <ProductCard
             product={item}
@@ -98,38 +128,87 @@ export default function ProductsScreen({ navigation, route }) {
       />
 
       {toast && (
-        <View style={styles.toast}><Text style={styles.toastText}>{toast}</Text></View>
+        <View style={styles.toast}>
+          <Text style={styles.toastText}>{toast}</Text>
+        </View>
       )}
     </View>
   );
 }
 
 const styles = StyleSheet.create({
-  catsScroll: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
+  // Cada linha de filtro tem altura fixa — isso impede o bug de expansão
+  filterRow: {
+    height: 48,
+    justifyContent: 'center',
+    paddingHorizontal: spacing.md,
+  },
+  filterContent: {
+    alignItems: 'center',
+    gap: spacing.sm,
+    paddingRight: spacing.md,
+  },
   catChip: {
-    paddingHorizontal: 14, paddingVertical: 7,
-    borderRadius: radius.sm, backgroundColor: colors.bg3,
-    borderWidth: 1, borderColor: colors.border, marginRight: spacing.sm,
+    paddingHorizontal: 16,
+    paddingVertical: 7,
+    borderRadius: radius.sm,
+    backgroundColor: colors.bg3,
+    borderWidth: 1,
+    borderColor: colors.border,
   },
-  catChipActive: { backgroundColor: colors.orange, borderColor: colors.orange },
-  catChipText: { fontSize: 13, fontWeight: '500', color: colors.text2 },
-  catChipTextActive: { color: '#fff', fontWeight: '700' },
-  sortsScroll: { paddingHorizontal: spacing.md, paddingBottom: spacing.sm },
+  catChipActive: {
+    backgroundColor: colors.orange,
+    borderColor: colors.orange,
+  },
+  catChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+    color: colors.text2,
+  },
+  catChipTextActive: {
+    color: '#fff',
+    fontWeight: '700',
+  },
   sortChip: {
-    paddingHorizontal: 12, paddingVertical: 5,
-    borderRadius: radius.sm, backgroundColor: colors.bg4,
-    marginRight: spacing.sm,
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: radius.sm,
+    backgroundColor: colors.bg4,
   },
-  sortChipActive: { backgroundColor: 'rgba(255,107,26,0.15)', borderWidth: 1, borderColor: colors.orange },
-  sortChipText: { fontSize: 12, color: colors.text3 },
-  sortChipTextActive: { color: colors.orange, fontWeight: '600' },
-  count: { fontSize: 12, color: colors.text3, paddingHorizontal: spacing.md, marginBottom: spacing.sm },
-  grid: { paddingHorizontal: spacing.md, paddingBottom: spacing.xl },
+  sortChipActive: {
+    backgroundColor: 'rgba(255,107,26,0.15)',
+    borderWidth: 1,
+    borderColor: colors.orange,
+  },
+  sortChipText: {
+    fontSize: 12,
+    color: colors.text3,
+  },
+  sortChipTextActive: {
+    color: colors.orange,
+    fontWeight: '600',
+  },
+  count: {
+    fontSize: 12,
+    color: colors.text3,
+    paddingHorizontal: spacing.md,
+    marginBottom: spacing.sm,
+  },
+  grid: {
+    paddingHorizontal: spacing.md,
+    paddingBottom: spacing.xl,
+  },
   toast: {
-    position: 'absolute', bottom: 16, left: 20, right: 20,
-    backgroundColor: colors.bg4, borderRadius: radius.md,
-    padding: 14, alignItems: 'center',
-    borderWidth: 1, borderColor: colors.border,
+    position: 'absolute',
+    bottom: 16,
+    left: 20,
+    right: 20,
+    backgroundColor: colors.bg4,
+    borderRadius: radius.md,
+    padding: 14,
+    alignItems: 'center',
+    borderWidth: 1,
+    borderColor: colors.border,
   },
   toastText: { color: colors.text, fontSize: 14, fontWeight: '500' },
 });
