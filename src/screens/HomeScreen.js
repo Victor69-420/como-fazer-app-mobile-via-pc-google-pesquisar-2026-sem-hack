@@ -6,11 +6,11 @@ import {
 } from 'react-native';
 import { colors, spacing, radius } from '../theme';
 import { SectionHeader, ProductCard, Avatar } from '../components';
-import { apiFetch, LOCAL_PRODUCTS, fmtPrice } from '../services/api';
+import { LOCAL_PRODUCTS, fmtPrice } from '../services/api';
 import { useApp } from '../context/AppContext';
 
 export default function HomeScreen({ navigation }) {
-  const { user, apiOnline, addToCart, refreshCartCount } = useApp();
+  const { user, addToCart, refreshCartCount } = useApp();
   const [featured, setFeatured] = useState([]);
   const [newItems, setNew]      = useState([]);
   const [refreshing, setRef]    = useState(false);
@@ -23,34 +23,35 @@ export default function HomeScreen({ navigation }) {
     setTimeout(() => setToast(null), 2200);
   }
 
-  const load = useCallback(async () => {
-    if (apiOnline) {
-      const [f, n] = await Promise.all([
-        apiFetch('/products/featured'),
-        apiFetch('/products/new'),
-      ]);
-      setFeatured(f?.products || LOCAL_PRODUCTS.slice(0, 6));
-      setNew(n?.products || LOCAL_PRODUCTS.slice(3, 9));
-    } else {
-      setFeatured(LOCAL_PRODUCTS.slice(0, 6));
-      setNew(LOCAL_PRODUCTS.slice(3, 9));
-    }
-  }, [apiOnline]);
+  const load = useCallback(() => {
+    // Produtos em destaque = os que têm badge de desconto
+    setFeatured(LOCAL_PRODUCTS.filter(p => p.badge && p.badge !== 'Novo').slice(0, 6));
+    // Novidades = os que têm badge 'Novo'
+    setNew(LOCAL_PRODUCTS.filter(p => p.badge === 'Novo').concat(
+      LOCAL_PRODUCTS.filter(p => !p.badge).slice(0, 3)
+    ).slice(0, 6));
+  }, []);
 
   useEffect(() => { load(); }, [load]);
 
   async function handleAdd(id) {
     await addToCart(id);
     await refreshCartCount();
-    const p = featured.find(x => x.id === id) || newItems.find(x => x.id === id);
+    const p = LOCAL_PRODUCTS.find(x => x.id === id);
     showToast(`${p?.name?.split(' ').slice(0, 3).join(' ')} adicionado! ✅`);
   }
 
   async function onRefresh() {
     setRef(true);
-    await load();
+    load();
     setRef(false);
   }
+
+  const CATS = [
+    { name: 'Elétrica', emoji: '⚡' }, { name: 'Motor', emoji: '⚙️' },
+    { name: 'Iluminação', emoji: '💡' }, { name: 'Bateria', emoji: '🔋' },
+    { name: 'Freios', emoji: '🛞' }, { name: 'Suspensão', emoji: '🔩' },
+  ];
 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }}>
@@ -89,15 +90,11 @@ export default function HomeScreen({ navigation }) {
         </View>
 
         {/* Categories */}
-        <View style={[styles.section, { paddingBottom: 0 }]}>
+        <View style={styles.section}>
           <SectionHeader title="Categorias" linkText="Ver todas" onLink={() => navigation.navigate('Products')} />
           <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -spacing.md }}>
             <View style={styles.catsRow}>
-              {[
-                { name: 'Elétrica', emoji: '⚡' }, { name: 'Motor', emoji: '⚙️' },
-                { name: 'Iluminação', emoji: '💡' }, { name: 'Bateria', emoji: '🔋' },
-                { name: 'Freios', emoji: '🛞' }, { name: 'Suspensão', emoji: '🔩' },
-              ].map(c => (
+              {CATS.map(c => (
                 <TouchableOpacity
                   key={c.name}
                   style={styles.catCard}
@@ -111,44 +108,51 @@ export default function HomeScreen({ navigation }) {
           </ScrollView>
         </View>
 
-        {/* Featured */}
+        {/* Em Destaque */}
         <View style={styles.section}>
           <SectionHeader title="Em Destaque" linkText="Ver todos" onLink={() => navigation.navigate('Products')} />
-          <FlatList
-            horizontal
-            data={featured}
-            keyExtractor={i => String(i.id)}
-            showsHorizontalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <ProductCard
-                product={item}
-                onPress={() => navigation.navigate('ProductDetail', { product: item })}
-                onAddToCart={() => handleAdd(item.id)}
-              />
-            )}
-          />
+          {featured.length > 0 ? (
+            <FlatList
+              horizontal
+              data={featured}
+              keyExtractor={i => String(i.id)}
+              showsHorizontalScrollIndicator={false}
+              renderItem={({ item }) => (
+                <ProductCard
+                  product={item}
+                  onPress={() => navigation.navigate('ProductDetail', { product: item })}
+                  onAddToCart={() => handleAdd(item.id)}
+                />
+              )}
+            />
+          ) : (
+            <Text style={styles.emptyText}>Nenhum produto em destaque</Text>
+          )}
         </View>
 
-        {/* New */}
+        {/* Novidades */}
         <View style={[styles.section, { paddingBottom: 24 }]}>
           <SectionHeader title="Novidades" linkText="Ver todas" onLink={() => navigation.navigate('Products')} />
-          <FlatList
-            horizontal
-            data={newItems}
-            keyExtractor={i => String(i.id)}
-            showsHorizontalScrollIndicator={false}
-            renderItem={({ item }) => (
-              <ProductCard
-                product={item}
-                onPress={() => navigation.navigate('ProductDetail', { product: item })}
-                onAddToCart={() => handleAdd(item.id)}
-              />
-            )}
-          />
+          {newItems.length > 0 ? (
+            <FlatList
+              horizontal
+              data={newItems}
+              keyExtractor={i => String(i.id)}
+              showsHorizontalScrollIndicator={false}
+              renderItem={({ item }) => (
+                <ProductCard
+                  product={item}
+                  onPress={() => navigation.navigate('ProductDetail', { product: item })}
+                  onAddToCart={() => handleAdd(item.id)}
+                />
+              )}
+            />
+          ) : (
+            <Text style={styles.emptyText}>Nenhuma novidade</Text>
+          )}
         </View>
       </ScrollView>
 
-      {/* Toast */}
       {toast && (
         <View style={styles.toast}>
           <Text style={styles.toastText}>{toast}</Text>
@@ -163,14 +167,12 @@ const styles = StyleSheet.create({
     flexDirection: 'row', justifyContent: 'space-between',
     alignItems: 'center', padding: spacing.md, paddingTop: spacing.sm,
   },
-  brandSub: { fontSize: 11, fontWeight: '600', color: colors.orange, letterSpacing: 2, textTransform: 'uppercase' },
+  brandSub:  { fontSize: 11, fontWeight: '600', color: colors.orange, letterSpacing: 2, textTransform: 'uppercase' },
   brandName: { fontSize: 24, fontWeight: '800', color: colors.text, letterSpacing: -0.5 },
   searchBar: {
     flexDirection: 'row', alignItems: 'center',
-    backgroundColor: colors.bg3,
-    borderWidth: 1, borderColor: colors.border,
-    borderRadius: radius.md,
-    marginHorizontal: spacing.md, marginBottom: spacing.md,
+    backgroundColor: colors.bg3, borderWidth: 1, borderColor: colors.border,
+    borderRadius: radius.md, marginHorizontal: spacing.md, marginBottom: spacing.md,
     paddingHorizontal: spacing.md, paddingVertical: 12, gap: 10,
   },
   searchPlaceholder: { flex: 1, fontSize: 14, color: colors.text3 },
@@ -182,8 +184,7 @@ const styles = StyleSheet.create({
   banner: {
     backgroundColor: colors.bg3, borderRadius: radius.lg,
     padding: spacing.lg, borderWidth: 1,
-    borderColor: 'rgba(255,107,26,0.2)', minHeight: 160,
-    justifyContent: 'flex-end',
+    borderColor: 'rgba(255,107,26,0.2)', minHeight: 160, justifyContent: 'flex-end',
   },
   bannerTag: {
     alignSelf: 'flex-start', backgroundColor: colors.orange,
@@ -191,25 +192,25 @@ const styles = StyleSheet.create({
   },
   bannerTagText: { color: '#fff', fontSize: 10, fontWeight: '700', letterSpacing: 1.5 },
   bannerTitle: { fontSize: 24, fontWeight: '800', color: colors.text, lineHeight: 28, marginBottom: 6 },
-  bannerDesc: { fontSize: 12, color: colors.text2, marginBottom: 14, maxWidth: 220 },
+  bannerDesc:  { fontSize: 12, color: colors.text2, marginBottom: 14, maxWidth: 220 },
   bannerBtn: {
     alignSelf: 'flex-start', backgroundColor: colors.orange,
     borderRadius: radius.sm, paddingHorizontal: 18, paddingVertical: 10,
   },
   bannerBtnText: { color: '#fff', fontWeight: '700', fontSize: 13 },
-  section: { padding: spacing.md, paddingBottom: 0 },
-  catsRow: { flexDirection: 'row', paddingHorizontal: spacing.md, gap: spacing.sm },
+  section:  { padding: spacing.md, paddingBottom: 0 },
+  catsRow:  { flexDirection: 'row', paddingHorizontal: spacing.md, gap: spacing.sm },
   catCard: {
     backgroundColor: colors.bg3, borderRadius: radius.md,
     borderWidth: 1, borderColor: colors.border,
     padding: 14, alignItems: 'center', gap: 6, minWidth: 80,
   },
-  catName: { fontSize: 11, fontWeight: '600', color: colors.text2, textAlign: 'center' },
+  catName:   { fontSize: 11, fontWeight: '600', color: colors.text2, textAlign: 'center' },
+  emptyText: { fontSize: 13, color: colors.text3, paddingVertical: spacing.sm },
   toast: {
     position: 'absolute', bottom: 16, left: 20, right: 20,
     backgroundColor: colors.bg4, borderRadius: radius.md,
-    padding: 14, alignItems: 'center',
-    borderWidth: 1, borderColor: colors.border,
+    padding: 14, alignItems: 'center', borderWidth: 1, borderColor: colors.border,
   },
   toastText: { color: colors.text, fontSize: 14, fontWeight: '500' },
 });
