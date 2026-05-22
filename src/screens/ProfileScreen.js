@@ -5,14 +5,14 @@ import {
 } from 'react-native';
 import { colors, spacing, radius } from '../theme';
 import { Avatar, Button } from '../components';
-import { apiFetch, fmtPrice } from '../services/api';
+import { fmtPrice } from '../services/api';
 import { useApp } from '../context/AppContext';
 
-export default function ProfileScreen() {
-  const { user, setUser, apiOnline, logout, orders: localOrders } = useApp();
-  const [orders, setOrders]   = useState(null);
-  const [showOrd, setShowOrd] = useState(false);
-  const [loadOrd, setLoadOrd] = useState(false);
+export default function ProfileScreen({ navigation }) {
+  const { user, apiOnline, logout, orders: localOrders, loadOrders } = useApp();
+  const [orders,   setOrders]   = useState(null);
+  const [showOrd,  setShowOrd]  = useState(false);
+  const [loadOrd,  setLoadOrd]  = useState(false);
 
   const initials = user?.name?.trim().split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase() || '?';
 
@@ -23,17 +23,12 @@ export default function ProfileScreen() {
     ]);
   }
 
-  async function loadOrders() {
+  async function handleOrders() {
     setLoadOrd(true);
-    if (apiOnline) {
-      try {
-        const r = await apiFetch('/orders');
-        setOrders(r?.orders || []);
-      } catch {
-        setOrders(localOrders || []);
-      }
-    } else {
-      // Modo offline: mostra pedidos feitos nesta sessão
+    try {
+      const data = loadOrders ? await loadOrders() : (localOrders || []);
+      setOrders(data);
+    } catch {
       setOrders(localOrders || []);
     }
     setShowOrd(true);
@@ -41,18 +36,18 @@ export default function ProfileScreen() {
   }
 
   const menuItems = [
-    { icon: '📦', label: 'Meus Pedidos',          onPress: loadOrders },
-    { icon: '📍', label: 'Endereços',              onPress: () => Alert.alert('Em breve', 'Funcionalidade em desenvolvimento.') },
-    { icon: '💳', label: 'Formas de Pagamento',   onPress: () => Alert.alert('Em breve', 'Funcionalidade em desenvolvimento.') },
-    { icon: '🔔', label: 'Notificações',           onPress: () => Alert.alert('Em breve', 'Funcionalidade em desenvolvimento.') },
-    { icon: '⚙️', label: 'Configurações',          onPress: () => Alert.alert('Em breve', 'Funcionalidade em desenvolvimento.') },
-    { icon: '💬', label: 'Suporte',                onPress: () => Alert.alert('Suporte ASR', 'WhatsApp: (21) 9 9999-9999\nE-mail: suporte@asreletronica.com.br') },
+    { icon: '📦', label: 'Meus Pedidos',         onPress: handleOrders },
+    { icon: '📍', label: 'Endereços',             onPress: () => navigation.navigate('Addresses') },
+    { icon: '💳', label: 'Formas de Pagamento',  onPress: () => navigation.navigate('Payment') },
+    { icon: '🔔', label: 'Notificações',          onPress: () => navigation.navigate('NotificationsSettings') },
+    { icon: '⚙️', label: 'Configurações',         onPress: () => Alert.alert('Em breve', 'Funcionalidade em desenvolvimento.') },
+    { icon: '💬', label: 'Suporte',               onPress: () => Alert.alert('Suporte ASR', 'WhatsApp: (21) 9 9449-8974\nE-mail: suporte@asreletronica.com.br') },
   ];
 
   return (
     <ScrollView style={{ flex: 1, backgroundColor: colors.bg }} showsVerticalScrollIndicator={false}>
 
-      {/* ── Card do usuário ── */}
+      {/* Card do usuário */}
       <View style={styles.userCard}>
         <Avatar initials={initials} size={72} />
         <View style={{ flex: 1 }}>
@@ -64,14 +59,14 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {/* ── Stats ── */}
+      {/* Stats */}
       <View style={styles.statsRow}>
         <View style={styles.statCard}>
           <Text style={styles.statVal}>{user?.stats?.orders ?? 0}</Text>
           <Text style={styles.statLabel}>Pedidos</Text>
         </View>
         <View style={styles.statCard}>
-          <Text style={styles.statVal}>R$ {((user?.stats?.totalSpent || 0)).toFixed(0)}</Text>
+          <Text style={styles.statVal}>R$ {(user?.stats?.totalSpent || 0).toFixed(0)}</Text>
           <Text style={styles.statLabel}>Total Gasto</Text>
         </View>
         <View style={styles.statCard}>
@@ -80,18 +75,15 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {/* ── Status da API ── */}
+      {/* Status da API */}
       <View style={styles.apiStatus}>
         <View style={[styles.statusDot, { backgroundColor: apiOnline ? colors.success : colors.error }]} />
         <Text style={styles.statusText}>
           {apiOnline ? 'Conectado ao servidor' : 'Modo offline (dados locais)'}
         </Text>
-        {!apiOnline && (
-          <Text style={styles.offlineHint}> · pedidos salvos localmente</Text>
-        )}
       </View>
 
-      {/* ── Menu ── */}
+      {/* Menu */}
       <View style={styles.menu}>
         {menuItems.map((item, idx) => (
           <TouchableOpacity
@@ -110,18 +102,15 @@ export default function ProfileScreen() {
         ))}
       </View>
 
-      {/* ── Lista de pedidos ── */}
+      {/* Lista de pedidos */}
       {showOrd && orders !== null && (
         <View style={styles.ordersBlock}>
           <View style={styles.ordersHeader}>
-            <Text style={styles.ordersTitle}>
-              📦 Pedidos {!apiOnline ? '(offline)' : ''}
-            </Text>
+            <Text style={styles.ordersTitle}>📦 Meus Pedidos</Text>
             <TouchableOpacity onPress={() => setShowOrd(false)}>
               <Text style={styles.ordersClose}>✕</Text>
             </TouchableOpacity>
           </View>
-
           {orders.length === 0 ? (
             <Text style={styles.noOrders}>Nenhum pedido realizado ainda.</Text>
           ) : (
@@ -145,7 +134,7 @@ export default function ProfileScreen() {
         </View>
       )}
 
-      {/* ── Logout ── */}
+      {/* Logout */}
       <View style={styles.logoutWrap}>
         <Button title="🚪  Sair da Conta" onPress={handleLogout} variant="secondary" />
       </View>
@@ -162,14 +151,14 @@ const styles = StyleSheet.create({
     backgroundColor: colors.bg3, borderRadius: radius.lg,
     margin: spacing.md, borderWidth: 1, borderColor: colors.border,
   },
-  userName:  { fontSize: 20, fontWeight: '800', color: colors.text },
-  userEmail: { fontSize: 13, color: colors.text3, marginBottom: 6 },
+  userName:    { fontSize: 20, fontWeight: '800', color: colors.text },
+  userEmail:   { fontSize: 13, color: colors.text3, marginBottom: 6 },
   tag: {
     alignSelf: 'flex-start', backgroundColor: 'rgba(255,107,26,0.12)',
     borderRadius: 6, paddingHorizontal: 10, paddingVertical: 4,
     borderWidth: 1, borderColor: 'rgba(255,107,26,0.25)',
   },
-  tagText: { fontSize: 11, color: colors.orange, fontWeight: '600' },
+  tagText:   { fontSize: 11, color: colors.orange, fontWeight: '600' },
   statsRow: {
     flexDirection: 'row', gap: spacing.sm,
     marginHorizontal: spacing.md, marginBottom: spacing.md,
@@ -186,15 +175,12 @@ const styles = StyleSheet.create({
     marginHorizontal: spacing.md, marginBottom: spacing.md,
     backgroundColor: colors.bg3, borderRadius: radius.sm,
     padding: spacing.sm, borderWidth: 1, borderColor: colors.border,
-    flexWrap: 'wrap',
   },
-  statusDot:   { width: 8, height: 8, borderRadius: 4 },
-  statusText:  { fontSize: 12, color: colors.text2 },
-  offlineHint: { fontSize: 11, color: colors.text3, fontStyle: 'italic' },
+  statusDot:  { width: 8, height: 8, borderRadius: 4 },
+  statusText: { fontSize: 12, color: colors.text2 },
   menu: {
     marginHorizontal: spacing.md, backgroundColor: colors.bg3,
-    borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
-    overflow: 'hidden',
+    borderRadius: radius.md, borderWidth: 1, borderColor: colors.border, overflow: 'hidden',
   },
   menuItem: {
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
@@ -207,29 +193,20 @@ const styles = StyleSheet.create({
     borderRadius: radius.md, borderWidth: 1, borderColor: colors.border,
     padding: spacing.md, gap: spacing.sm,
   },
-  ordersHeader: {
-    flexDirection: 'row', justifyContent: 'space-between',
-    alignItems: 'center', marginBottom: 8,
-  },
-  ordersTitle: { fontSize: 16, fontWeight: '700', color: colors.text },
-  ordersClose: { fontSize: 18, color: colors.text3, padding: 4 },
-  noOrders:    { fontSize: 14, color: colors.text3, textAlign: 'center', padding: spacing.md },
+  ordersHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
+  ordersTitle:  { fontSize: 16, fontWeight: '700', color: colors.text },
+  ordersClose:  { fontSize: 18, color: colors.text3, padding: 4 },
+  noOrders:     { fontSize: 14, color: colors.text3, textAlign: 'center', padding: spacing.md },
   orderItem: {
     flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center',
     paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border,
   },
-  orderId:   { fontSize: 13, fontWeight: '700', color: colors.text },
-  orderDate: { fontSize: 11, color: colors.text3, marginTop: 2 },
-  orderRight: { alignItems: 'flex-end', gap: 4 },
-  orderTotal: { fontSize: 15, fontWeight: '700', color: colors.orange },
-  orderStatus: {
-    backgroundColor: 'rgba(77,170,116,0.15)', borderRadius: 6,
-    paddingHorizontal: 8, paddingVertical: 3,
-  },
-  orderStatusText: {
-    fontSize: 10, color: colors.success,
-    fontWeight: '600', textTransform: 'uppercase',
-  },
-  logoutWrap: { margin: spacing.md, marginTop: spacing.lg },
-  version:    { textAlign: 'center', fontSize: 11, color: colors.text3, marginBottom: spacing.xl },
+  orderId:         { fontSize: 13, fontWeight: '700', color: colors.text },
+  orderDate:       { fontSize: 11, color: colors.text3, marginTop: 2 },
+  orderRight:      { alignItems: 'flex-end', gap: 4 },
+  orderTotal:      { fontSize: 15, fontWeight: '700', color: colors.orange },
+  orderStatus:     { backgroundColor: 'rgba(77,170,116,0.15)', borderRadius: 6, paddingHorizontal: 8, paddingVertical: 3 },
+  orderStatusText: { fontSize: 10, color: colors.success, fontWeight: '600', textTransform: 'uppercase' },
+  logoutWrap:      { margin: spacing.md, marginTop: spacing.lg },
+  version:         { textAlign: 'center', fontSize: 11, color: colors.text3, marginBottom: spacing.xl },
 });
