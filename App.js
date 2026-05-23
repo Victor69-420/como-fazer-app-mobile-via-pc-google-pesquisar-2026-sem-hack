@@ -1,27 +1,25 @@
 // App.js
-import React, { useEffect } from 'react';
+import React from 'react';
 import { NavigationContainer } from '@react-navigation/native';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { View, Text, ActivityIndicator, StyleSheet } from 'react-native';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
-import * as Notifications from 'expo-notifications';
 
 import { AppProvider, useApp } from './src/context/AppContext';
 import { colors } from './src/theme';
-import { scheduleRecurringNotifications } from './src/services/notifications';
 
-import AuthScreen              from './src/screens/AuthScreen';
-import HomeScreen              from './src/screens/HomeScreen';
-import ProductsScreen          from './src/screens/ProductsScreen';
-import ProductDetailScreen     from './src/screens/ProductDetailScreen';
-import CartScreen              from './src/screens/CartScreen';
-import SearchScreen            from './src/screens/SearchScreen';
-import ProfileScreen           from './src/screens/ProfileScreen';
-import AddressScreen           from './src/screens/AddressScreen';
-import PaymentScreen           from './src/screens/PaymentScreen';
-import NotificationsScreen     from './src/screens/NotificationsScreen';
+import AuthScreen          from './src/screens/AuthScreen';
+import HomeScreen          from './src/screens/HomeScreen';
+import ProductsScreen      from './src/screens/ProductsScreen';
+import ProductDetailScreen from './src/screens/ProductDetailScreen';
+import CartScreen          from './src/screens/CartScreen';
+import SearchScreen        from './src/screens/SearchScreen';
+import ProfileScreen       from './src/screens/ProfileScreen';
+import AddressScreen       from './src/screens/AddressScreen';
+import PaymentScreen       from './src/screens/PaymentScreen';
+import NotificationsScreen from './src/screens/NotificationsScreen';
 
 const Tab   = createBottomTabNavigator();
 const Stack = createNativeStackNavigator();
@@ -73,7 +71,7 @@ function ProfileStack() {
   );
 }
 
-function TabIcon({ emoji, color, count }) {
+function TabIcon({ emoji, count }) {
   return (
     <View style={{ alignItems: 'center' }}>
       <Text style={{ fontSize: 22 }}>{emoji}</Text>
@@ -93,37 +91,29 @@ function MainTabs() {
       screenOptions={{
         headerShown: false,
         tabBarStyle: {
-          backgroundColor: colors.bg2, borderTopColor: colors.border,
-          borderTopWidth: 1, height: 80, paddingBottom: 12, paddingTop: 8,
+          backgroundColor: colors.bg2,
+          borderTopColor:  colors.border,
+          borderTopWidth:  1,
+          height:          80,
+          paddingBottom:   12,
+          paddingTop:      8,
         },
         tabBarActiveTintColor:   colors.orange,
         tabBarInactiveTintColor: colors.text3,
         tabBarLabelStyle: { fontSize: 10, fontWeight: '500', marginTop: 2 },
       }}
     >
-      <Tab.Screen name="Home"     component={HomeStack}     options={{ tabBarLabel: 'Início',   tabBarIcon: ({ color }) => <TabIcon emoji="🏠" color={color} /> }} />
-      <Tab.Screen name="Products" component={ProductsStack} options={{ tabBarLabel: 'Catálogo', tabBarIcon: ({ color }) => <TabIcon emoji="🔧" color={color} /> }} />
-      <Tab.Screen name="Cart"     component={CartStack}     options={{ tabBarLabel: 'Carrinho', tabBarIcon: ({ color }) => <TabIcon emoji="🛒" color={color} count={cartCount} /> }} />
-      <Tab.Screen name="Search"   component={SearchStack}   options={{ tabBarLabel: 'Buscar',   tabBarIcon: ({ color }) => <TabIcon emoji="🔍" color={color} /> }} />
-      <Tab.Screen name="Profile"  component={ProfileStack}  options={{ tabBarLabel: 'Perfil',   tabBarIcon: ({ color }) => <TabIcon emoji="👤" color={color} /> }} />
+      <Tab.Screen name="Home"     component={HomeStack}     options={{ tabBarLabel: 'Início',   tabBarIcon: () => <TabIcon emoji="🏠" /> }} />
+      <Tab.Screen name="Products" component={ProductsStack} options={{ tabBarLabel: 'Catálogo', tabBarIcon: () => <TabIcon emoji="🔧" /> }} />
+      <Tab.Screen name="Cart"     component={CartStack}     options={{ tabBarLabel: 'Carrinho', tabBarIcon: () => <TabIcon emoji="🛒" count={cartCount} /> }} />
+      <Tab.Screen name="Search"   component={SearchStack}   options={{ tabBarLabel: 'Buscar',   tabBarIcon: () => <TabIcon emoji="🔍" /> }} />
+      <Tab.Screen name="Profile"  component={ProfileStack}  options={{ tabBarLabel: 'Perfil',   tabBarIcon: () => <TabIcon emoji="👤" /> }} />
     </Tab.Navigator>
   );
 }
 
 function RootNavigator() {
   const { user, loading } = useApp();
-
-  // Iniciar notificações quando usuário logar
-  useEffect(() => {
-    if (!user) return;
-
-    // Listener de notificação recebida
-    const sub = Notifications.addNotificationResponseReceivedListener(response => {
-      console.log('Notificação tocada:', response.notification.request.content.title);
-    });
-
-    return () => sub.remove();
-  }, [user]);
 
   if (loading) {
     return (
@@ -159,11 +149,11 @@ export default function App() {
 }
 
 const stackOpts = {
-  headerStyle:      { backgroundColor: colors.bg2 },
-  headerTintColor:  colors.text,
-  headerTitleStyle: { fontWeight: '700', color: colors.text },
+  headerStyle:         { backgroundColor: colors.bg2 },
+  headerTintColor:     colors.text,
+  headerTitleStyle:    { fontWeight: '700', color: colors.text },
   headerShadowVisible: false,
-  contentStyle:     { backgroundColor: colors.bg },
+  contentStyle:        { backgroundColor: colors.bg },
 };
 
 const styles = StyleSheet.create({
