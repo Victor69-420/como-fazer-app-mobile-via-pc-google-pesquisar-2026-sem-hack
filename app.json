@@ -3,10 +3,10 @@
     "name": "ASR Eletrônica",
     "slug": "asr-eletronica",
     "version": "1.0.0",
+    "sdkVersion": "53.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": true,
-    "icon": "./assets/icon.png",
+    "newArchEnabled": false,
     "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#0C0C0E"
@@ -19,8 +19,6 @@
       "adaptiveIcon": {
         "backgroundColor": "#0C0C0E"
       },
-      "edgeToEdgeEnabled": true,
-      "predictiveBackGestureEnabled": false,
       "package": "com.asr.eletronica"
     },
     "web": {
