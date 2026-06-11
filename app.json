@@ -1,5 +1,37 @@
 {
-  "plugins": [
-    "expo-secure-store"
-  ]
+  "expo": {
+    "name": "ASR Eletrônica",
+    "slug": "asr-eletronica",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "dark",
+    "newArchEnabled": true,
+    "icon": "./assets/icon.png",
+    "splash": {
+      "resizeMode": "contain",
+      "backgroundColor": "#0C0C0E"
+    },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.asr.eletronica"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#0C0C0E"
+      },
+      "edgeToEdgeEnabled": true,
+      "predictiveBackGestureEnabled": false,
+      "package": "com.asr.eletronica"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png"
+    },
+    "plugins": [
+      "expo-secure-store",
+      "expo-status-bar"
+    ],
+    "updates": {
+      "enabled": false
+    }
+  }
 }
