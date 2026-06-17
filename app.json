@@ -3,17 +3,12 @@
     "name": "ASR Eletrônica",
     "slug": "asr-eletronica",
     "version": "1.0.0",
-    "sdkVersion": "53.0.0",
     "orientation": "portrait",
     "userInterfaceStyle": "dark",
-    "newArchEnabled": false,
+    "icon": "./assets/icon.png",
     "splash": {
       "resizeMode": "contain",
       "backgroundColor": "#0C0C0E"
-    },
-    "ios": {
-      "supportsTablet": false,
-      "bundleIdentifier": "com.asr.eletronica"
     },
     "android": {
       "adaptiveIcon": {
@@ -21,12 +16,15 @@
       },
       "package": "com.asr.eletronica"
     },
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.asr.eletronica"
+    },
     "web": {
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
-      "expo-secure-store",
-      "expo-status-bar"
+      "expo-secure-store"
     ],
     "updates": {
       "enabled": false
